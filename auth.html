@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<script src="http://peterolson.github.com/BigInteger.js/BigInteger.min.js"></script>
+		<script>
+var Auth = {};
+Auth.Util = {};
+Auth.Util.GCD = function(inA, inB)
+{
+	var oldA;
+	var a = inA;
+	var b = inB;
+	var count = 0;
+	while(b != 0)
+	{
+		oldA = a;// make a backup of a
+		a = b; // copy b into a
+		b = oldA % b; 
+		
+		++count;
+		if(count > inB)
+			return "didnt work";
+		
+	}
+	return a;
+};
+Auth.Util.Coprime = function(inNumber)
+{
+	var i;
+	for(i=0; i<100; i++)
+	{
+		console.log(i);
+		var rand = Math.floor(Math.random()*inNumber);
+		if(Auth.Util.GCD(rand, inNumber) === 1)
+			return rand;
+	}
+	return -1;
+};
+Auth.RSA = {};
+Auth.RSA.P = bigInt("61");
+Auth.RSA.Q = bigInt("53");
+Auth.RSA.N = Auth.RSA.P.multiply(Auth.RSA.Q);
+Auth.RSA.PhiN = Auth.RSA.P.subtract(1).multiply(Auth.RSA.Q.subtract(1));
+Auth.RSA.E = bigInt("17");
+Auth.RSA.D = bigInt("2753");
+		</script>
+		<script>
+var mes = bigInt("123");
+
+var enc = mes.modPow(Auth.RSA.E, Auth.RSA.N);
+var dec = enc.modPow(Auth.RSA.D, Auth.RSA.N);
+
+		</script>
+	</head>
+	<body>
+		
+	</body>
+</html>

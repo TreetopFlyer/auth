@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		
+	</head>
+	<body>
+		<h1>Users</h1>
+		<ul>
+		{{#each users}}
+			<li>
+				<form method="POST" action="/users">
+					<dl>
+						<dt>Auth.Name:</dt>
+						<dd>{{this.Auth.Name}}</dd>
+						<dt>Auth.ID:</dt>
+						<dd>{{this.Auth.ID}}</dd>
+						<dt>Auth.Token:</dt>
+						<dd>{{this.Auth.Token}}</dd>
+						<dt>Auth.Expires:</dt>
+						<dd>{{this.Auth.Expires}}</dd>
+					</dl>
+					<input type="hidden" name="Method" value="Delete"/>
+					<input type="hidden" name="_id" value="{{this._id}}"/>
+					<input type="submit" value="Delete"/>
+				</form>
+			</li>
+		{{/each}}
+		</ul>
+	</body>
+</html>
