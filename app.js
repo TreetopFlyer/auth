@@ -32,6 +32,7 @@ Query.ObjToString = function(inObj)
 };
 
 
+
 var Auth = {};
 Auth.Util = {};
 Auth.Util.GCD = function(inA, inB)
@@ -75,11 +76,12 @@ Auth.RSA.E = Auth.Util.Coprime(Auth.RSA.PhiN);
 
 
 var FB = {};
-var FB = {};
+
 FB.Config = {};
 FB.Config.AppID = "1628003107468799";
 FB.Config.AppSecret = "2db01a126ae61f9b885262470c2abc88";
 FB.Config.AppURL = "http://10.1.100.171/process-code";
+
 FB.URL = {};
 FB.URL.Code = function()
 {
@@ -117,6 +119,7 @@ FB.URL.Profile = function(inToken)
 	};
 	return endpoint + "?" + Query.ObjToString(args);
 };
+
 FB.Request = {};
 FB.Request.Get = function(inURL, inHandler)
 {
@@ -215,11 +218,37 @@ Server.get("/login", function(inReq, inRes)
 });
 Server.get("/process-code", function(inReq, inRes)
 {
-	var queryObj = Query.StringToObj(inReq._parsedUrl.search.substring(1));
+	var queryString;
+	var queryObj;
+	
+	queryString = inReq._parsedUrl.search;
+	if(queryString === null)
+	{
+		inRes.render("error", {message:"no query string"});
+		return;
+	}
+
+	queryObj = Query.StringToObj(queryString.substring(1));
+	if(queryObj.code === undefined)
+	{
+		inRes.render("error", {message:"no code provided"});
+		return;
+	}
+	
+
+	//take the code and get a token
 	FB.Request.Get(FB.URL.Token(queryObj.code), function(inData)
 	{
-		var tokenObj = Query.StringToObj(inData);
+		var tokenObj;
 		
+		tokenObj = Query.StringToObj(inData);
+		if(tokenObj.access_token === undefined)
+		{
+			inRes.render("error", {message:"faulty code"});
+			return;
+		}
+		
+		//take the token and get the user profile
 		FB.Request.Get(FB.URL.Profile(tokenObj.access_token), function(inData)
 		{
 			var profileObj = JSON.parse(inData);
@@ -291,10 +320,12 @@ Server.use("/users", function(inReq, inRes)
 });
 Server.get("/cookie", function(inReq, inRes)
 {
-	
-	console.log(inReq.cookies);
+	console.log(inReq.Cookies);
 	inRes.send("hey");
 });
+
+
+
 DB.Methods.Start(function()
 {
 	Server.listen(80);
