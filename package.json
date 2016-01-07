@@ -13,6 +13,7 @@
     "body-parser": "^1.13.3",
     "express": "^4.13.3",
     "express-handlebars": "^2.0.1",
-    "mongodb": "^2.0.42"
+    "mongodb": "^2.0.42",
+    "sha1": "^1.1.1"
   }
 }

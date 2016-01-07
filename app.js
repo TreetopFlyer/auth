@@ -4,11 +4,13 @@ var Handlebars = require("express-handlebars");
 var BodyParser = require("body-parser");
 var HTTPS = require("https");
 var Big = require("big-integer");
+var sha1 = require("sha1");
 
 
 
-var Query = {};
-Query.StringToObj = function(inString)
+var HTTPHelper = {};
+HTTPHelper.Query = {};
+HTTPHelper.Query.StringToObj = function(inString)
 {
 	var parts = inString.split("&");
 	var i;
@@ -21,7 +23,7 @@ Query.StringToObj = function(inString)
 	}
 	return output;
 };
-Query.ObjToString = function(inObj)
+HTTPHelper.Query.ObjToString = function(inObj)
 {
 	var output = "";
 	for(prop in inObj)
@@ -30,10 +32,27 @@ Query.ObjToString = function(inObj)
 	}
 	return output.substring(0, output.length-1);
 };
+HTTPHelper.Request = {};
+HTTPHelper.Request.GET = function(inURL, inHandler)
+{
+	HTTPS.get(inURL, function(inHTTPRes)
+	{
+		var responseBody = "";
+		inHTTPRes.on("data", function(inChunk)
+		{
+			responseBody += inChunk;
+		});
+		inHTTPRes.on("end", function()
+		{
+			inHandler(responseBody);
+		});
+	});
+};
 
 
 
 
+/*
 var Auth = {};
 Auth.Util = {};
 Auth.Util.GCD = function(inA, inB)
@@ -73,6 +92,7 @@ Auth.RSA.Q = 1789;
 Auth.RSA.N = Auth.RSA.P*Auth.RSA.Q;
 Auth.RSA.PhiN = (Auth.RSA.P - 1)*(Auth.RSA.Q - 1);
 Auth.RSA.E = Auth.Util.Coprime(Auth.RSA.PhiN);
+*/
 
 
 
@@ -99,7 +119,7 @@ FB.URL.Code = function()
 		"state" : state,
 		"redirect_uri" : FB.Config.AppURL
 	};
-	return endpoint + "?" + Query.ObjToString(args);
+	return endpoint + "?" + HTTPHelper.Query.ObjToString(args);
 };
 FB.URL.Token = function(inCode)
 {
@@ -111,7 +131,7 @@ FB.URL.Token = function(inCode)
 		"code" : inCode,
 		"redirect_uri" : FB.Config.AppURL
 	};
-	return endpoint + "?" + Query.ObjToString(args);
+	return endpoint + "?" + HTTPHelper.Query.ObjToString(args);
 };
 FB.URL.Profile = function(inToken)
 {
@@ -119,24 +139,7 @@ FB.URL.Profile = function(inToken)
 	var args = {
 		"access_token" : inToken
 	};
-	return endpoint + "?" + Query.ObjToString(args);
-};
-
-FB.Request = {};
-FB.Request.Get = function(inURL, inHandler)
-{
-	HTTPS.get(inURL, function(inHTTPRes)
-	{
-		var responseBody = "";
-		inHTTPRes.on("data", function(inChunk)
-		{
-			responseBody += inChunk;
-		});
-		inHTTPRes.on("end", function()
-		{
-			inHandler(responseBody);
-		});
-	});
+	return endpoint + "?" + HTTPHelper.Query.ObjToString(args);
 };
 
 
@@ -147,6 +150,7 @@ var DB = {};
 DB.Config = {};
 DB.Config.Endpoint = "mongodb://localhost:27017/auth";
 DB.Config.Collection = "Users";
+DB.Config.HashSecret = "aqowfhawfiohawf"; // this is prepended to the FB ID of a user before the sha1 hashing
 
 DB.Members = {};
 DB.Members.Connection = false;
@@ -184,27 +188,61 @@ Server.engine("html", Handlebars());
 Server.set("view engine", "html");
 Server.use("/", Express.static(__dirname+"/"));
 Server.use(BodyParser.urlencoded({ extended: false }));
+
+/*my homemade cookie parser middleware*/
 Server.use(function(inReq, inRes, inNext)
 {
-	var cookies = inReq.headers.cookie;
+	var cookies;
+	
+	cookies = inReq.headers.cookie;
+
+	inReq.Cookies = {};
 	if(cookies)
 	{
 		cookies = cookies.split("; ");
 		
 		var i;
 		var split;
-		var obj = {};
 		for(i=0; i<cookies.length; i++)
 		{
 			split = cookies[i].indexOf("=");
 			var key = cookies[i].substring(0, split);
 			var value = cookies[i].substring(split+1);
-			obj[key] = value;
+			inReq.Cookies[key] = value;
 		}
-		inReq.Cookies = obj;
 	}
 	inNext();
 });
+
+/*check if user is logged in*/
+Server.use(function(inReq, inRes, inNext)
+{
+	var authID, authIDHash;
+	authID = inReq.Cookies["Auth.ID"];
+	authIDHash = inReq.Cookies["Auth.IDHash"];
+	inReq.Auth = {};
+	
+	if(authID === undefined || authIDHash === undefined)
+	{
+		inReq.Auth.LoggedIn = false;
+	}
+	else
+	{
+		if(sha1(DB.Config.HashSecret + authID) === authIDHash)
+		{
+			inReq.Auth.LoggedIn = true;
+		}
+		else
+		{
+			inReq.Auth.LoggedIn = false;
+		}
+	}
+	
+	inNext();
+	
+});
+
+
 Server.RenderUsers = function(inRes)
 {
 	DB.Members.Collection.find().toArray(function(inError, inArray)
@@ -215,10 +253,33 @@ Server.RenderUsers = function(inRes)
 		inRes.render("users", {users:inArray});
 	});
 };
+
+/*
+Log in with Facebook, this is the starting point.
+*/
 Server.get("/login", function(inReq, inRes)
 {
-	inRes.redirect(FB.URL.Code());
+	if(inReq.Auth.LoggedIn)
+	{
+		inRes.redirect("/profile");
+	}
+	else
+	{
+		inRes.redirect(FB.URL.Code());
+	}
 });
+Server.get("/logout", function(inReq, inRes)
+{
+	inRes.clearCookie("Auth.ID");
+	inRes.clearCookie("Auth.IDHash");
+	inRes.redirect("/profile");
+});
+
+/*
+You end up here for a brief moment after choosing to log in with Facebook.
+This endpoint takes facebook's query string code and uses oauth to fetch your profile, and then either matches you with an existing user, or creates a new user with your profile it got from Facebook.
+You are then presented with your resulting profile information.
+*/
 Server.get("/process-code", function(inReq, inRes)
 {
 	var queryString;
@@ -231,7 +292,7 @@ Server.get("/process-code", function(inReq, inRes)
 		return;
 	}
 
-	queryObj = Query.StringToObj(queryString.substring(1));
+	queryObj = HTTPHelper.Query.StringToObj(queryString.substring(1));
 	if(queryObj.code === undefined)
 	{
 		inRes.render("error", {message:"no code provided"});
@@ -240,40 +301,43 @@ Server.get("/process-code", function(inReq, inRes)
 	
 
 	//take the code and get a token
-	FB.Request.Get(FB.URL.Token(queryObj.code), function(inData)
+	HTTPHelper.Request.GET(FB.URL.Token(queryObj.code), function(inData)
 	{
 		var tokenObj;
 		
-		tokenObj = Query.StringToObj(inData);
+		tokenObj = HTTPHelper.Query.StringToObj(inData);
 		if(tokenObj.access_token === undefined)
 		{
-			inRes.render("error", {message:"faulty code"});
+			inRes.render("error", {message:"could not retrieve access_token. ---> " + inData});
 			return;
 		}
 		
 		//take the token and get the user profile
-		FB.Request.Get(FB.URL.Profile(tokenObj.access_token), function(inData)
+		HTTPHelper.Request.GET(FB.URL.Profile(tokenObj.access_token), function(inData)
 		{
-			var profileObj = JSON.parse(inData);
-
-			DB.Members.Collection.findOne({"Auth.ID":{$eq:profileObj.id}}, function(inError, inRecord)
+			var profileObj;
+			var IDHash;
+			
+			profileObj = JSON.parse(inData);
+			IDHash = sha1(DB.Config.HashSecret + profileObj.id)
+			
+			DB.Members.Collection.findOne({"Auth.IDHash":{$eq:IDHash}}, function(inError, inRecord)
 			{
 				if(inError)
 					throw inError;
 					
 				if(inRecord)
 				{
-					console.log("user", profileObj.name, "was found");
-					inRes.cookie("Auth.ID", profileObj.id);
-					inRes.render("profile", profileObj);	
+					inRes.cookie("Auth.ID", inRecord.Auth.ID);
+					inRes.cookie("Auth.IDHash", inRecord.Auth.IDHash);
+					inRes.redirect("/profile");
 				}
 				else
 				{
-					console.log("user", profileObj.name, "not on file");
-					
 					var model = {};
 					model.Auth = {};
 					model.Auth.ID = profileObj.id;
+					model.Auth.IDHash = sha1(DB.Config.HashSecret + profileObj.id);
 					model.Auth.Token = tokenObj.access_token;
 					model.Auth.Name = profileObj.name;
 					model.Auth.Expires = tokenObj.expires;
@@ -283,15 +347,23 @@ Server.get("/process-code", function(inReq, inRes)
 						if(inError)
 							throw inError;
 						
-						console.log("user was added");
-						inRes.cookie("Auth.ID", profileObj.id);
-						inRes.render("profile", profileObj);
+						inRes.cookie("Auth.ID", model.Auth.ID);
+						inRes.cookie("Auth.IDHash", model.Auth.IDHash);
+						inRes.redirect("/profile");
 					});
 				}
 			});
 		});
 	});
 });
+
+
+
+
+
+/*
+Draw a list of all registered users
+*/
 Server.use("/users", function(inReq, inRes)
 {
 	switch(inReq.body.Method)
@@ -321,10 +393,34 @@ Server.use("/users", function(inReq, inRes)
 			break;
 	}
 });
-Server.get("/cookie", function(inReq, inRes)
+
+
+Server.get("/profile", function(inReq, inRes)
 {
-	console.log(inReq.Cookies);
-	inRes.send("hey");
+	if(inReq.Auth.LoggedIn)
+	{
+	
+		DB.Members.Collection.findOne({"Auth.IDHash":{$eq:inReq.Cookies["Auth.IDHash"]}}, function(inError, inRecord)
+		{
+			if(inError)
+				throw inError;
+				
+			if(inRecord)
+			{
+				inRes.render("profile", inRecord);	
+			}
+			else
+			{
+				inRes.send("could not render profile, bad credentials");
+			}
+		});
+		
+	}
+	else
+	{
+		inRes.send("you are NOT logged in.");
+	}
+	
 });
 
 

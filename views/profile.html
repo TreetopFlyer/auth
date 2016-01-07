@@ -6,8 +6,12 @@
 	<body>
 		<h1>welcome</h1>
 		<p>
-			Facebook told me you are <strong>{{name}}</strong>
-			and that your ID is <strong>{{id}}</strong>
+			Facebook told me you are <strong>{{this.Auth.Name}}</strong>
+			<br/>
+			and that your ID is <strong>{{this.Auth.ID}}</strong>
+		</p>
+		<p>
+			The sha1 hash of your ID is <strong>{{this.Auth.IDHash}}</strong>
 		</p>
 		<a href="/users">View all registered users</a>
 	</body>
