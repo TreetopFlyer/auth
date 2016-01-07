@@ -33,6 +33,7 @@ Query.ObjToString = function(inObj)
 
 
 
+
 var Auth = {};
 Auth.Util = {};
 Auth.Util.GCD = function(inA, inB)
@@ -72,6 +73,7 @@ Auth.RSA.Q = 1789;
 Auth.RSA.N = Auth.RSA.P*Auth.RSA.Q;
 Auth.RSA.PhiN = (Auth.RSA.P - 1)*(Auth.RSA.Q - 1);
 Auth.RSA.E = Auth.Util.Coprime(Auth.RSA.PhiN);
+
 
 
 
@@ -136,6 +138,7 @@ FB.Request.Get = function(inURL, inHandler)
 		});
 	});
 };
+
 
 
 
