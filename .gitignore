@@ -1,2 +1,9 @@
 node_modules/*
 mongo_data/*
+npm-debug.log
+
+#mongo files that get littered in the project
+*.0
+*.ns
+*.lock
+*.bson
