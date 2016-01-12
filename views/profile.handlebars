@@ -4,6 +4,10 @@
 		
 	</head>
 	<body>
+		
+		{{> nav status}}
+	
+		{{#if this.Auth.Name}}
 		<h1>welcome</h1>
 		<p>
 			Facebook told me you are <strong>{{this.Auth.Name}}</strong>
@@ -13,6 +17,8 @@
 		<p>
 			The sha1 hash of your ID is <strong>{{this.Auth.IDHash}}</strong>
 		</p>
+		{{/if}}
+		
 		<a href="/users">View all registered users</a>
 	</body>
 </html>

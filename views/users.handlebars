@@ -4,11 +4,14 @@
 		
 	</head>
 	<body>
+		
+		{{> nav status}}
+	
 		<h1>Users</h1>
 		<ul>
 		{{#each users}}
 			<li>
-				<form method="POST" action="/users">
+				<form method="GET" action="/users">
 					<dl>
 						<dt>Auth.Name:</dt>
 						<dd>{{this.Auth.Name}}</dd>
@@ -21,8 +24,7 @@
 						<dt>Auth.Expires:</dt>
 						<dd>{{this.Auth.Expires}}</dd>
 					</dl>
-					<input type="hidden" name="Method" value="Delete"/>
-					<input type="hidden" name="_id" value="{{this._id}}"/>
+					<input type="hidden" name="Auth.IDHash" value="{{this.Auth.IDHash}}"/>
 					<input type="submit" value="Delete"/>
 				</form>
 			</li>

@@ -4,10 +4,15 @@
 		
 	</head>
 	<body>
+	
+		{{> nav status}}
+	
 		<h1>Error</h1>
 		<p>
 		{{message}}
 		</p>
 		<a href="/login">back to login</a>
+		<br/>
+		<a href="/logout">logout and start over (if you deleted your own profile do this)</a>
 	</body>
 </html>

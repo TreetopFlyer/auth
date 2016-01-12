@@ -1,0 +1,22 @@
+<ul>
+	<li><a href="/login">Log In</a></li>
+	<li><a href="/logout">Log Out</a></li>
+	<li><a href="/profile">Your Profile</a></li>
+	<li><a href="/users">All Users</a></li>
+</ul>
+<dl>
+	<dt>
+		Your Status:
+	</dt>
+	{{#if LoggedIn}}
+	<dd>
+		<span>Logged in</span>
+		<li><a href="/logout">Log Out</a></li>
+	</dd>
+	{{else}}
+	<dd>
+		<span>not logged in</span>
+		<li><a href="/login">Log In</a></li>
+	</dd>
+	{{/if}}
+</dl>

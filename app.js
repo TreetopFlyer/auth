@@ -1,9 +1,7 @@
 var Mongo = require("mongodb");
 var Express = require("express");
 var Handlebars = require("express-handlebars");
-var BodyParser = require("body-parser");
 var HTTPS = require("https");
-//var Big = require("big-integer");
 var sha1 = require("sha1");
 
 
@@ -140,12 +138,15 @@ FB.URL.Profile = function(inToken)
 /*
 namespace for communicating with a local MongoDB instance
 */
+/*
+It needs:
+Auth
+*/
 var DB = {};
 
 DB.Config = {};
 DB.Config.Endpoint = "mongodb://localhost:27017/auth";
 DB.Config.Collection = "Users";
-DB.Config.HashSecret = "aqowfhawfiohawf"; // this is prepended to the FB ID of a user before the sha1 hashing
 
 DB.Members = {};
 DB.Members.Connection = false;
@@ -176,16 +177,57 @@ DB.Methods.Stop = function()
 	DB.Members.Database.close();
 };
 DB.Access = {};
-DB.Access.User = function(inHashedID)
+DB.Access.User = function(inHashedID, inHandler)
 {
+	var search = {};
+	search[Auth.Config.KeyIDHash] = {$eq:inHashedID};
 	
+	DB.Members.Collection.findOne(search, function(inError, inRecord)
+	{
+		if(inError)
+			throw inError;
+		
+		inHandler(inRecord);
+	});
+};
+DB.Access.Users = function(inHandler)
+{
+	DB.Members.Collection.find().toArray(function(inError, inArray)
+	{
+		if(inError)
+			throw inError;
+		
+		inHandler(inArray);
+	});
+};
+DB.Access.Delete = function(inHashedID, inHandler)
+{
+	var search = {};
+	search[Auth.Config.KeyIDHash] = {$eq:inHashedID};
+	
+	DB.Members.Collection.remove(search, function(inError, inResult)
+	{
+		if(inError)
+			throw inError;
+		
+		inHandler(inResult);
+	});
+};
+DB.Access.Create = function(inModel, inHandler)
+{
+	DB.Members.Collection.insert(inModel, {w:1}, function(inError, inResult)
+	{
+		if(inError)
+			throw inError;
+		
+		inHandler(inResult);
+	});
 };
 
 
 /*little namespace for working with digital signatures.*/
 /*
-no dependencies per-se, but it does have know know about express and the cookie middleware defined in server
-as some of the methods have to do with cookies.
+no dependencies.
 */
 var Auth = {};
 Auth.Config = {};
@@ -205,33 +247,7 @@ Auth.Verify = function(inMessage, inSignedMessage)
 		
 	return false;
 };
-Auth.CookieSet = function(inExpressResponse, inID)
-{
-	inExpressResponse.cookie(Auth.Config.KeyID, inID);
-	inExpressResponse.cookie(Auth.Config.KeyIDHash, Auth.Sign(inID));
-};
-Auth.CookieGet = function()
-{
-	var authID, authIDHash;
-	
-	//inReq.Cookies is created via the cookie parser middleware
-	authID = inReq.Cookies[Auth.Config.KeyID];
-	authIDHash = inReq.Cookies[Auth.Config.KeyIDHash];
-	
-	if(authID === undefined || authIDHash === undefined)
-	{
-		return false;
-	}
-	else
-	{
-		return Auth.Verify(authID, authIDHash);
-	}
-};
-Auth.CookieClear = function(inExpressResponse)
-{
-	inExpressResponse.clearCookie(Auth.Config.KeyID);
-	inExpressResponse.clearCookie(Auth.Config.KeyIDHash);
-};
+
 
 
 
@@ -249,10 +265,10 @@ DB
 */
 var Server = Express();
 
-Server.engine("html", Handlebars());
-Server.set("view engine", "html");
+Server.engine("handlebars", Handlebars());
+Server.set("view engine", "handlebars");
+
 Server.use("/", Express.static(__dirname+"/")); //should be moved to a public/ directory so that app.js is not exposed
-Server.use(BodyParser.urlencoded({ extended: false }));
 
 /*my homemade cookie parser middleware*/
 Server.use(function(inReq, inRes, inNext)
@@ -283,57 +299,34 @@ Server.use(function(inReq, inRes, inNext)
 Server.use(function(inReq, inRes, inNext)
 {
 	inReq.Auth = {};
-	inReq.Auth.LoggedIn = Server.Utilities.CookieGet();
+	inReq.Auth.LogIn = function(inID, inIDHash)
+	{
+		inRes.cookie(Auth.Config.KeyID, inID);
+		inRes.cookie(Auth.Config.KeyIDHash, inIDHash);
+	};
+	inReq.Auth.LogOut = function()
+	{
+		inRes.clearCookie(Auth.Config.KeyID);
+		inRes.clearCookie(Auth.Config.KeyIDHash);
+	};
+	inReq.Auth.ID = inReq.Cookies[Auth.Config.KeyID];
+	inReq.Auth.IDHash = inReq.Cookies[Auth.Config.KeyIDHash];
+	if(inReq.Auth.ID === undefined || inReq.Auth.IDHash === undefined)
+	{
+		inReq.Auth.LoggedIn = false;
+	}
+	else
+	{
+		inReq.Auth.LoggedIn = Auth.Verify(inReq.Auth.ID, inReq.Auth.IDHash);
+	}
 	inNext();
 });
 
 
-// Auth is a dependency here
-Server.Utilities = {};
-Server.Utilities.CookieSet = function(inExpressResponse, inID)
-{
-	inExpressResponse.cookie(Auth.Config.KeyID, inID);
-	inExpressResponse.cookie(Auth.Config.KeyIDHash, Auth.Sign(inID));
-};
-Server.Utilities.CookieGet = function()
-{
-	var authID, authIDHash;
-	
-	//inReq.Cookies is created via the cookie parser middleware above
-	authID = inReq.Cookies[Auth.Config.KeyID];
-	authIDHash = inReq.Cookies[Auth.Config.KeyIDHash];
-	
-	if(authID === undefined || authIDHash === undefined)
-	{
-		return false;
-	}
-	else
-	{
-		return Auth.Verify(authID, authIDHash);
-	}
-};
-Server.Utilities.CookieClear = function(inExpressResponse)
-{
-	inExpressResponse.clearCookie(Auth.Config.KeyID);
-	inExpressResponse.clearCookie(Auth.Config.KeyIDHash);
-};
-
-/*this is dumb*/
-Server.RenderUsers = function(inRes)
-{
-	DB.Members.Collection.find().toArray(function(inError, inArray)
-	{
-		if(inError)
-			throw inError;
-		
-		inRes.render("users", {users:inArray});
-	});
-};
-
 
 //actual routes start here
 /*
-Log in with Facebook, this is the starting point.
+Log in with Facebook
 */
 Server.get("/login", function(inReq, inRes)
 {
@@ -348,13 +341,12 @@ Server.get("/login", function(inReq, inRes)
 });
 Server.get("/logout", function(inReq, inRes)
 {
-	Server.Utilities.CookieClear(inRes);
+	inReq.Auth.LogOut();
 	inRes.redirect("/profile");
 });
-
 /*
 You end up here for a brief moment after choosing to log in with Facebook.
-This endpoint takes facebook's query string code and uses oauth to fetch your profile, and then either matches you with an existing user, or creates a new user in mongo with your profile that it got from Facebook.
+This endpoint takes facebook's query string "access code" and uses oauth to fetch your profile, and then either matches you with an existing user, or creates a new user in mongo with your profile that it got from Facebook.
 You are then presented with your resulting profile information via redirect to /profile.
 */
 Server.get("/process-code", function(inReq, inRes)
@@ -365,14 +357,14 @@ Server.get("/process-code", function(inReq, inRes)
 	queryString = inReq._parsedUrl.search;
 	if(queryString === null)
 	{
-		inRes.render("error", {message:"no query string"});
+		inRes.render("error", {message:"no query string", status:inReq.Auth});
 		return;
 	}
 
 	queryObj = HTTPHelper.QueryToObj(queryString.substring(1));
 	if(queryObj.code === undefined)
 	{
-		inRes.render("error", {message:"no code provided"});
+		inRes.render("error", {message:"no code provided", status:inReq.Auth});
 		return;
 	}
 	
@@ -385,7 +377,7 @@ Server.get("/process-code", function(inReq, inRes)
 		tokenObj = HTTPHelper.QueryToObj(inData);
 		if(tokenObj.access_token === undefined)
 		{
-			inRes.render("error", {message:"could not retrieve access_token. ---> " + inData});
+			inRes.render("error", {message:"could not retrieve access_token. ---> " + inData + "   ----> (revisiting the login page may resolve this problem. i have to look into this.)", status:inReq.Auth});
 			return;
 		}
 		
@@ -397,36 +389,31 @@ Server.get("/process-code", function(inReq, inRes)
 			
 			//the authentication cookies are "digitally signed" on the server with a one-way sha1 hash. this prevents people from giving themselves cookies with their own FB IDs.
 			profileObj = JSON.parse(inData);
-			IDHash = sha1(DB.Config.HashSecret + profileObj.id);
+			IDHash = Auth.Sign(profileObj.id);
 			
-			DB.Members.Collection.findOne({"Auth.IDHash":{$eq:IDHash}}, function(inError, inRecord)
+			// find the user with this idhash
+			DB.Access.User(IDHash, function(inUser)
 			{
-				if(inError)
-					throw inError;
-					
-				if(inRecord)
+				if(inUser)
 				{
-					inRes.cookie("Auth.ID", inRecord.Auth.ID);
-					inRes.cookie("Auth.IDHash", inRecord.Auth.IDHash);
+					// if they exist, log them in and show the profile
+					inReq.Auth.LogIn(profileObj.id, IDHash);
 					inRes.redirect("/profile");
 				}
 				else
 				{
+					// otherwise, make a new account with what we have, then login and view profile
 					var model = {};
 					model.Auth = {};
 					model.Auth.ID = profileObj.id;
-					model.Auth.IDHash = sha1(DB.Config.HashSecret + profileObj.id);
+					model.Auth.IDHash = IDHash;
 					model.Auth.Token = tokenObj.access_token;
 					model.Auth.Name = profileObj.name;
 					model.Auth.Expires = tokenObj.expires;
 					
-					DB.Members.Collection.insert(model, {w:1}, function(inError, inResult)
+					DB.Access.Create(model, function(inResult)
 					{
-						if(inError)
-							throw inError;
-						
-						inRes.cookie("Auth.ID", model.Auth.ID);
-						inRes.cookie("Auth.IDHash", model.Auth.IDHash);
+						inReq.Auth.LogIn(profileObj.id, IDHash);
 						inRes.redirect("/profile");
 					});
 				}
@@ -434,72 +421,50 @@ Server.get("/process-code", function(inReq, inRes)
 		});
 	});
 });
-
-
-
-
-
 /*
-Draw a list of all registered users
+Show a list of all registered users
 */
-Server.use("/users", function(inReq, inRes)
+Server.get("/users", function(inReq, inRes)
 {
-	// this switch statement is an old thing that needs depreciated.
-	switch(inReq.body.Method)
+	var deleteID = inReq.query[Auth.Config.KeyIDHash];
+	if(deleteID)
 	{
-		case "Post" :
-			DB.Members.Collection.insert({Name:inReq.body.Name}, function(inError, inResult)
-			{
-				if(inError)
-					throw inError;
-					
-				Server.RenderUsers(inRes);
-			});
-			break;
-			
-		case "Delete" :
-			DB.Members.Collection.remove({_id:Mongo.ObjectId(inReq.body._id)}, function(inError, inResult)
-			{
-				if(inError)
-					throw inError;
-					
-				Server.RenderUsers(inRes);
-			});
-			break;
-		
-		default :
-			Server.RenderUsers(inRes);
-			break;
+		console.log("delete called for", deleteID);
+		DB.Access.Delete(deleteID, function(inUsers)
+		{
+			inRes.redirect("/users");
+		});	
+	}
+	else
+	{
+		DB.Access.Users(function(inUsers)
+		{
+			inRes.render("users", {users:inUsers, status:inReq.Auth});
+		});		
 	}
 });
-
-
 Server.get("/profile", function(inReq, inRes)
 {
 	if(inReq.Auth.LoggedIn)
 	{
 	
-		DB.Members.Collection.findOne({"Auth.IDHash":{$eq:inReq.Cookies["Auth.IDHash"]}}, function(inError, inRecord)
+		DB.Access.User(inReq.Auth.IDHash, function(inUser)
 		{
-			if(inError)
-				throw inError;
-				
-			if(inRecord)
+			if(inUser)
 			{
-				inRes.render("profile", inRecord);	
+				inUser.status = inReq.Auth;
+				inRes.render("profile", inUser);	
 			}
 			else
 			{
-				inRes.send("could not render profile, bad credentials");
+				inRes.render("error", {message:"could not render profile. bad credentials or missing profile.", status:inReq.Auth});
 			}
-		});
-		
+		});		
 	}
 	else
 	{
-		inRes.send("you are NOT logged in.");
+		inRes.render("profile", {status:inReq.Auth});	
 	}
-	
 });
 
 
