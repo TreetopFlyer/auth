@@ -1,10 +1,4 @@
 node_modules/*
-mongo_data/*
-npm-debug.log
+database/*
 
-#mongo files that get littered in the project not sure how you are supposed to deal with this
-journal/
-*.0
-*.ns
-*.lock
-*.bson
+npm-debug.log
