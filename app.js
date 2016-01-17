@@ -3,7 +3,12 @@ var Express = require("express");
 var Handlebars = require("express-handlebars");
 var HTTPS = require("https");
 var sha1 = require("sha1");
+var DotEnv = require("dotenv");
 
+DotEnv.config({silent:true});
+DotEnv.load();
+
+console.log(process.env.DB_MongoURL);
 
 
 /*
@@ -91,9 +96,9 @@ HTTPHelper
 var FB = {};
 
 FB.Config = {};
-FB.Config.AppID = "1628003107468799"; 
-FB.Config.AppSecret = "2db01a126ae61f9b885262470c2abc88"; // well, the cats out of the bag...
-FB.Config.AppURL = "http://10.1.100.171/process-code"; //
+FB.Config.AppID = process.env.FB_AppID; 
+FB.Config.AppSecret = process.env.FB_AppSecret;
+FB.Config.AppURL = process.env.FB_AppURL;
 
 FB.URL = {};
 FB.URL.Code = function()
@@ -145,8 +150,8 @@ Auth
 var DB = {};
 
 DB.Config = {};
-DB.Config.Endpoint = "mongodb://localhost:27017/auth";
-DB.Config.Collection = "Users";
+DB.Config.Endpoint = process.env.DB_MongoURL;
+DB.Config.Collection = process.env.DB_MongoCollection;
 
 DB.Members = {};
 DB.Members.Connection = false;
